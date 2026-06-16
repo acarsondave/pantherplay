@@ -6,6 +6,7 @@ pub struct OnsetDetector {
     prev_spectrum: Vec<f32>,
     threshold: f32,
     window: Vec<f32>,
+    complex_buffer: Vec<Complex<f32>>,
 }
 
 impl OnsetDetector {
@@ -25,6 +26,7 @@ impl OnsetDetector {
             prev_spectrum: vec![0.0; frame_size],
             threshold,
             window,
+            complex_buffer: Vec::with_capacity(frame_size),
         }
     }
 
@@ -35,18 +37,20 @@ impl OnsetDetector {
         }
 
         // Apply window and convert to complex
-        let mut buffer: Vec<Complex<f32>> = frame.iter()
-            .zip(self.window.iter())
-            .map(|(&s, &w)| Complex { re: s * w, im: 0.0 })
-            .collect();
+        self.complex_buffer.clear();
+        self.complex_buffer.extend(
+            frame.iter()
+                .zip(self.window.iter())
+                .map(|(&s, &w)| Complex { re: s * w, im: 0.0 })
+        );
 
         // Perform FFT
-        self.fft.process(&mut buffer);
+        self.fft.process(&mut self.complex_buffer);
 
         // Compute magnitude spectrum and spectral flux
         let mut flux = 0.0;
-        for i in 0..buffer.len() / 2 { // Only need first half (real signal)
-            let mag = buffer[i].norm();
+        for i in 0..self.complex_buffer.len() / 2 { // Only need first half (real signal)
+            let mag = self.complex_buffer[i].norm();
             let diff = mag - self.prev_spectrum[i];
             if diff > 0.0 {
                 flux += diff;

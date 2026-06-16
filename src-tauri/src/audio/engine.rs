@@ -94,21 +94,19 @@ impl AudioEngine {
                 // Read from ring buffer into our local frame buffer
                 let avail = cons.occupied_len();
                 if avail > 0 {
-                    let mut chunk = vec![0.0; avail];
-                    cons.pop_slice(&mut chunk);
-                    buffer.extend(chunk);
+                    buffer.extend(cons.pop_iter());
                 }
                 
                 // Process full frames
                 while buffer.len() >= frame_size {
-                    let frame: Vec<f32> = buffer.drain(0..frame_size).collect();
+                    let frame = &buffer[0..frame_size];
                     
                     // RMS for audio level
                     let rms = (frame.iter().map(|x| x * x).sum::<f32>() / frame_size as f32).sqrt();
                     let _ = on_event.send(AudioEvent::AudioLevel { rms });
                     
                     // Onset detection
-                    if onset_detector.detect(&frame) {
+                    if onset_detector.detect(frame) {
                         let _ = on_event.send(AudioEvent::OnsetDetected { 
                             timestamp: 0, // TODO: actual timestamp
                             energy: rms 
@@ -116,7 +114,7 @@ impl AudioEngine {
                     }
                     
                     // Chromagram & Chord Classification
-                    if let Some(chroma) = chromagram.process_frame(&frame) {
+                    if let Some(chroma) = chromagram.process_frame(frame) {
                         let (chord, confidence) = classifier.classify(&chroma);
                         let _ = on_event.send(AudioEvent::ChordDetected {
                             chord,
@@ -124,6 +122,9 @@ impl AudioEngine {
                             timestamp: 0, // TODO: actual timestamp
                         });
                     }
+                    
+                    // Remove processed frame from buffer
+                    buffer.drain(0..frame_size);
                 }
                 
                 // Yield to avoid pegging CPU if ringbuf is empty

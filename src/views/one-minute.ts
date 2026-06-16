@@ -81,6 +81,8 @@ export function renderOneMinute(container: HTMLElement) {
     }
   };
 
+  let unsubChord: (() => void) | null = null;
+
   const startSession = async () => {
     viewState = 'playing';
     transitions = 0;
@@ -99,7 +101,8 @@ export function renderOneMinute(container: HTMLElement) {
       return;
     }
 
-    const unsubChord = audio.onChord((ev) => {
+    if (unsubChord) unsubChord();
+    unsubChord = audio.onChord((ev) => {
       const el = document.getElementById('current-chord');
       if (el && ev.confidence > 0.6) {
         el.textContent = `Detected: ${ev.chord}`;
@@ -123,7 +126,7 @@ export function renderOneMinute(container: HTMLElement) {
       
       if (timeLeft <= 0) {
         clearInterval(timerInterval);
-        unsubChord();
+        if (unsubChord) unsubChord();
         audio.stopListening();
         
         // Save to firebase (todo in Phase 2)
@@ -141,6 +144,7 @@ export function renderOneMinute(container: HTMLElement) {
   const unsubRoute = router.subscribe((route) => {
     if (route !== 'one-minute') {
       if (timerInterval) clearInterval(timerInterval);
+      if (unsubChord) unsubChord();
       audio.stopListening();
       unsubRoute();
     }

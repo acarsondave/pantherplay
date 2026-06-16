@@ -36,18 +36,15 @@ impl ChordClassifier {
             self.history.remove(0);
         }
 
-        // Find most frequent chord in history
-        let mut counts = std::collections::HashMap::new();
-        for chord in &self.history {
-            *counts.entry(chord.clone()).or_insert(0) += 1;
-        }
-
+        // Find most frequent chord in history (without HashMap allocation)
         let mut smoothed_chord = best_chord.to_string();
         let mut max_count = 0;
-        for (chord, count) in counts {
+        
+        for chord in &self.history {
+            let count = self.history.iter().filter(|c| *c == chord).count();
             if count > max_count {
                 max_count = count;
-                smoothed_chord = chord;
+                smoothed_chord = chord.to_string();
             }
         }
 
