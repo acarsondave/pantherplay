@@ -1,0 +1,104 @@
+@import './tokens.css';
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-base);
+  color: var(--color-text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#app {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+.btn {
+  background-color: var(--color-surface-0);
+  color: var(--color-text);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  transition: background-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.btn:hover {
+  background-color: var(--color-surface-1);
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  background-color: var(--color-accent);
+  color: var(--color-crust);
+}
+
+.btn-primary:hover {
+  background-color: var(--color-text); /* Slight brighten effect */
+}
+
+a {
+  color: var(--color-blue);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Typography utilities */
+.text-mono { font-family: var(--font-mono); }
+.text-xs { font-size: var(--font-size-xs); }
+.text-sm { font-size: var(--font-size-sm); }
+.text-md { font-size: var(--font-size-md); }
+.text-lg { font-size: var(--font-size-lg); }
+.text-xl { font-size: var(--font-size-xl); }
+.text-2xl { font-size: var(--font-size-2xl); }
+.text-3xl { font-size: var(--font-size-3xl); }
+.text-display { font-size: var(--font-size-display); }
+.text-hero { font-size: var(--font-size-hero); font-weight: 800; }
+
+.text-subtext { color: var(--color-subtext-0); }
+.text-accent { color: var(--color-accent); }
+.text-green { color: var(--color-green); }
+.text-red { color: var(--color-red); }
+
+/* Layout utilities */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.gap-sm { gap: var(--space-sm); }
+.gap-md { gap: var(--space-md); }
+.gap-lg { gap: var(--space-lg); }
+.w-full { width: 100%; }
+.h-full { height: 100%; }
+.p-lg { padding: var(--space-lg); }
