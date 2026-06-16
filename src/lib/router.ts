@@ -1,14 +1,13 @@
-export type Route = 'dashboard' | 'free-play' | 'one-minute' | 'matrix' | 'settings';
+export type Route = 'free-play' | 'one-minute' | 'matrix' | 'settings';
 
 type RouteListener = (route: Route) => void;
 
 class Router {
-  private currentRoute: Route = 'dashboard';
+  private currentRoute: Route = 'one-minute';
   private listeners: RouteListener[] = [];
 
   constructor() {
     window.addEventListener('hashchange', () => this.handleHashChange());
-    // Trigger initial route
     setTimeout(() => this.handleHashChange(), 0);
   }
 
@@ -17,14 +16,14 @@ class Router {
     if (hash && this.isValidRoute(hash)) {
       this.currentRoute = hash;
     } else {
-      this.currentRoute = 'dashboard';
-      window.location.hash = 'dashboard';
+      this.currentRoute = 'one-minute';
+      window.location.hash = 'one-minute';
     }
     this.notify();
   }
 
   private isValidRoute(route: string): route is Route {
-    return ['dashboard', 'free-play', 'one-minute', 'matrix', 'settings'].includes(route);
+    return ['free-play', 'one-minute', 'matrix', 'settings'].includes(route);
   }
 
   public navigate(route: Route) {
