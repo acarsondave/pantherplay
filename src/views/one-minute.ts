@@ -3,7 +3,6 @@ import { store } from '../lib/store';
 import { router } from '../lib/router';
 
 export function renderOneMinute(container: HTMLElement) {
-  // Simple state machine for the view
   let viewState: 'setup' | 'playing' | 'results' = 'setup';
   let chordFrom = 'D';
   let chordTo = 'A';
@@ -12,66 +11,92 @@ export function renderOneMinute(container: HTMLElement) {
   let transitions = 0;
   let timeLeft = 0;
   let timerInterval: any = null;
-  
   let lastChord = '';
 
   const render = () => {
     if (viewState === 'setup') {
       container.innerHTML = `
-        <div class="h-full flex flex-col items-center justify-center gap-xl p-xl">
-          <div class="w-full flex justify-between absolute top-0 left-0 p-md">
-            <button id="btn-back" class="btn">← Back</button>
+        <div class="zen-fade h-full w-full flex flex-col items-center justify-center max-w-2xl mx-auto">
+          <div class="flex items-center gap-sm mb-lg text-accent">
+            <i class="ph ph-timer text-3xl"></i>
+            <h1 class="text-3xl font-bold tracking-tight">One-Minute Changes</h1>
           </div>
           
-          <h1 class="text-3xl text-accent">One-Minute Changes</h1>
-          
-          <div class="flex items-center gap-lg bg-surface-0 p-lg rounded-xl">
-            <select id="sel-from" class="bg-surface-1 text-text border border-surface-2 p-sm rounded text-xl">
-              ${['A', 'C', 'D', 'E', 'G', 'Am', 'Dm', 'Em'].map(c => `<option value="${c}" ${c===chordFrom?'selected':''}>${c}</option>`).join('')}
-            </select>
-            <span class="text-subtext text-xl">↔</span>
-            <select id="sel-to" class="bg-surface-1 text-text border border-surface-2 p-sm rounded text-xl">
-              ${['A', 'C', 'D', 'E', 'G', 'Am', 'Dm', 'Em'].map(c => `<option value="${c}" ${c===chordTo?'selected':''}>${c}</option>`).join('')}
-            </select>
+          <div class="glass p-xl rounded-xl flex flex-col gap-xl w-full">
+            <div class="flex items-center justify-center gap-lg">
+              <select id="sel-from" class="bg-surface-0 text-text border border-surface-2 p-md rounded-lg text-2xl font-bold text-center outline-none cursor-pointer appearance-none px-xl">
+                ${['A', 'C', 'D', 'E', 'G', 'Am', 'Dm', 'Em'].map(c => `<option value="${c}" ${c===chordFrom?'selected':''}>${c}</option>`).join('')}
+              </select>
+              <i class="ph ph-arrows-left-right text-subtext text-2xl"></i>
+              <select id="sel-to" class="bg-surface-0 text-text border border-surface-2 p-md rounded-lg text-2xl font-bold text-center outline-none cursor-pointer appearance-none px-xl">
+                ${['A', 'C', 'D', 'E', 'G', 'Am', 'Dm', 'Em'].map(c => `<option value="${c}" ${c===chordTo?'selected':''}>${c}</option>`).join('')}
+              </select>
+            </div>
+            
+            <button id="btn-start" class="btn btn-primary text-xl px-2xl py-lg w-full flex items-center justify-center gap-sm">
+              <i class="ph ph-play text-2xl"></i> Start Test
+            </button>
           </div>
-          
-          <button id="btn-start" class="btn btn-primary text-2xl px-2xl py-md mt-md">Start Practice</button>
         </div>
       `;
 
-      document.getElementById('btn-back')?.addEventListener('click', () => router.navigate('dashboard'));
       document.getElementById('sel-from')?.addEventListener('change', (e) => chordFrom = (e.target as HTMLSelectElement).value);
       document.getElementById('sel-to')?.addEventListener('change', (e) => chordTo = (e.target as HTMLSelectElement).value);
       document.getElementById('btn-start')?.addEventListener('click', startSession);
 
     } else if (viewState === 'playing') {
+      // In playing state, we want ZERO UI bloat. Only the test matters.
       container.innerHTML = `
-        <div class="h-full flex flex-col items-center justify-center">
-          <div class="text-subtext text-xl mb-xl">Change between <span class="text-accent">${chordFrom}</span> and <span class="text-accent">${chordTo}</span></div>
+        <div class="h-full w-full flex flex-col items-center justify-center relative">
           
-          <div class="text-hero text-green mb-sm" id="transition-count">${transitions}</div>
-          <div class="text-subtext mb-2xl">Transitions</div>
+          <div class="absolute top-10 right-10 flex gap-md opacity-50 hover:opacity-100 transition-fast">
+            <button id="btn-abort" class="btn glass p-md rounded-full flex items-center justify-center text-subtext hover:text-text hover:bg-surface-2" title="Abort Test">
+              <i class="ph ph-x text-2xl"></i>
+            </button>
+          </div>
+
+          <div class="text-subtext text-2xl mb-xl font-medium tracking-wide uppercase">
+            <span class="${lastChord === chordFrom ? 'text-accent' : ''}">${chordFrom}</span> 
+            <i class="ph ph-arrows-left-right mx-sm"></i> 
+            <span class="${lastChord === chordTo ? 'text-accent' : ''}">${chordTo}</span>
+          </div>
           
-          <div class="text-3xl text-text font-mono" id="time-left">${timeLeft}s</div>
+          <div class="text-hero text-text font-mono font-bold leading-none" id="transition-count">${transitions}</div>
+          <div class="text-subtext text-lg tracking-widest uppercase mb-2xl">Transitions</div>
           
-          <div class="mt-2xl text-xl" id="current-chord">Ready...</div>
+          <div class="flex items-center gap-sm text-3xl text-subtext font-mono mt-xl">
+            <i class="ph ph-hourglass"></i>
+            <span id="time-left">${timeLeft}</span>
+          </div>
+          
         </div>
       `;
+      
+      document.getElementById('btn-abort')?.addEventListener('click', abortSession);
+
     } else if (viewState === 'results') {
       container.innerHTML = `
-        <div class="h-full flex flex-col items-center justify-center gap-lg p-xl">
-          <h1 class="text-3xl text-accent">Session Complete!</h1>
-          <div class="bg-surface-0 p-xl rounded-xl text-center shadow-lg mt-md">
-            <div class="text-hero text-green mb-sm">${transitions}</div>
-            <div class="text-subtext text-lg">Transitions / Minute</div>
-            <div class="text-md text-text mt-md border-t border-surface-1 pt-md">
-              ${chordFrom} ↔ ${chordTo}
+        <div class="zen-fade h-full flex flex-col items-center justify-center gap-lg max-w-lg mx-auto w-full">
+          <div class="flex items-center gap-sm mb-lg text-green">
+            <i class="ph ph-check-circle text-4xl"></i>
+            <h1 class="text-3xl font-bold tracking-tight">Test Complete</h1>
+          </div>
+          
+          <div class="glass p-xl rounded-xl text-center w-full">
+            <div class="text-hero text-text font-mono font-bold leading-none mb-sm">${transitions}</div>
+            <div class="text-subtext text-lg tracking-widest uppercase mb-lg">CPM (Changes per Minute)</div>
+            <div class="text-xl text-accent font-medium bg-surface-0 py-sm rounded-lg border border-surface-1">
+              ${chordFrom} <i class="ph ph-arrows-left-right mx-xs"></i> ${chordTo}
             </div>
           </div>
           
-          <div class="flex gap-md mt-xl">
-            <button id="btn-retry" class="btn btn-primary px-lg py-sm">Try Again</button>
-            <button id="btn-done" class="btn px-lg py-sm">Done</button>
+          <div class="flex gap-md w-full mt-md">
+            <button id="btn-retry" class="btn glass flex-1 text-xl py-md hover:bg-surface-1 flex items-center justify-center gap-sm">
+              <i class="ph ph-arrow-counter-clockwise"></i> Retry
+            </button>
+            <button id="btn-done" class="btn btn-primary flex-1 text-xl py-md flex items-center justify-center gap-sm">
+              <i class="ph ph-check"></i> Continue
+            </button>
           </div>
         </div>
       `;
@@ -88,6 +113,9 @@ export function renderOneMinute(container: HTMLElement) {
     transitions = 0;
     timeLeft = duration;
     lastChord = '';
+    
+    // ENGAGE ZEN MODE
+    document.body.classList.add('is-practicing');
     render();
 
     try {
@@ -95,6 +123,7 @@ export function renderOneMinute(container: HTMLElement) {
       await audio.startListening(state.micDeviceId || undefined);
     } catch(e) {
       console.error(e);
+      document.body.classList.remove('is-practicing');
       alert("Microphone error");
       viewState = 'setup';
       render();
@@ -103,11 +132,7 @@ export function renderOneMinute(container: HTMLElement) {
 
     if (unsubChord) unsubChord();
     unsubChord = audio.onChord((ev) => {
-      const el = document.getElementById('current-chord');
-      if (el && ev.confidence > 0.6) {
-        el.textContent = `Detected: ${ev.chord}`;
-        
-        // Very basic transition counting logic
+      if (ev.confidence > 0.6) {
         if ((ev.chord === chordFrom || ev.chord === chordTo) && ev.chord !== lastChord && lastChord !== '') {
            transitions++;
            const countEl = document.getElementById('transition-count');
@@ -115,6 +140,7 @@ export function renderOneMinute(container: HTMLElement) {
         }
         if (ev.chord === chordFrom || ev.chord === chordTo) {
            lastChord = ev.chord;
+           render(); // Re-render playing state to show active chord color
         }
       }
     });
@@ -122,19 +148,32 @@ export function renderOneMinute(container: HTMLElement) {
     timerInterval = setInterval(() => {
       timeLeft--;
       const tEl = document.getElementById('time-left');
-      if (tEl) tEl.textContent = `${timeLeft}s`;
+      if (tEl) tEl.textContent = timeLeft.toString();
       
       if (timeLeft <= 0) {
-        clearInterval(timerInterval);
-        if (unsubChord) unsubChord();
-        audio.stopListening();
-        
-        // Save to firebase (todo in Phase 2)
-        
-        viewState = 'results';
-        render();
+        endSession();
       }
     }, 1000);
+  };
+
+  const endSession = () => {
+    clearInterval(timerInterval);
+    if (unsubChord) unsubChord();
+    audio.stopListening();
+    
+    // DISENGAGE ZEN MODE
+    document.body.classList.remove('is-practicing');
+    viewState = 'results';
+    render();
+  };
+
+  const abortSession = () => {
+    clearInterval(timerInterval);
+    if (unsubChord) unsubChord();
+    audio.stopListening();
+    document.body.classList.remove('is-practicing');
+    viewState = 'setup';
+    render();
   };
 
   // Initial render
@@ -146,6 +185,7 @@ export function renderOneMinute(container: HTMLElement) {
       if (timerInterval) clearInterval(timerInterval);
       if (unsubChord) unsubChord();
       audio.stopListening();
+      document.body.classList.remove('is-practicing');
       unsubRoute();
     }
   });

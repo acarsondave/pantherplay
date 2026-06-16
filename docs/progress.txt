@@ -1,0 +1,2 @@
+- Phase 1: Core audio engine and basic routing completed.
+- Phase 1.5: UI overhaul and optional login (Planning).
