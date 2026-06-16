@@ -4,8 +4,11 @@ use serde::Serialize;
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use tauri::ipc::Channel;
 
+use pitch_detection::detector::mcleod::McLeodDetector;
+use pitch_detection::detector::PitchDetector;
+
 use super::chromagram::Chromagram;
-use super::chord::ChordClassifier;
+use chord_detector::{ChordDetector, NoteName, ChordKind};
 use super::onset::OnsetDetector;
 
 #[derive(Clone, Serialize)]
@@ -14,22 +17,27 @@ pub enum AudioEvent {
     ChordDetected { chord: String, confidence: f32, timestamp: u64 },
     OnsetDetected { timestamp: u64, energy: f32 },
     AudioLevel { rms: f32 },
+    CalibrationComplete { frequency: f32 },
 }
 
 /// Minimum RMS level to consider a frame as containing audio.
-/// Below this, the frame is treated as silence and no processing occurs.
-/// Typical ambient laptop mic noise is ~0.002-0.005 RMS.
 const SILENCE_THRESHOLD: f32 = 0.008;
 
 pub struct AudioEngine {
     is_running: Arc<AtomicBool>,
+    calibration_trigger: Arc<AtomicBool>,
 }
 
 impl AudioEngine {
     pub fn new() -> Self {
         Self {
             is_running: Arc::new(AtomicBool::new(false)),
+            calibration_trigger: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    pub fn trigger_calibration(&self) {
+        self.calibration_trigger.store(true, Ordering::SeqCst);
     }
 
     pub fn start(&self, device_name: Option<String>, on_event: Channel<AudioEvent>) -> Result<(), String> {
@@ -56,7 +64,7 @@ impl AudioEngine {
         let sample_rate: u32 = config.sample_rate().into();
         let sample_rate = sample_rate as usize;
 
-        let ringbuf_capacity = sample_rate;
+        let ringbuf_capacity = sample_rate * 2; // 2 seconds
         let rb = HeapRb::<f32>::new(ringbuf_capacity);
         let (mut prod, mut cons) = rb.split();
 
@@ -82,16 +90,30 @@ impl AudioEngine {
 
         // Processing thread
         let is_running_proc = self.is_running.clone();
+        let is_calibrating = self.calibration_trigger.clone();
 
         std::thread::spawn(move || {
             let _stream_keeper = stream;
 
-            let frame_size = 4096; // ~93ms at 44.1kHz
-            let mut chromagram = Chromagram::new(frame_size, sample_rate).unwrap();
-            let mut classifier = ChordClassifier::new();
+            let frame_size = 1024; // smaller frame size for low latency
+            
+            // Build our dynamically tunable chromagram with downsample_factor = 1 for ~90ms latency
+            let mut chromagram = Chromagram::builder()
+                .frame_size(frame_size)
+                .sampling_rate(sample_rate)
+                .downsample_factor(1)
+                .build()
+                .unwrap();
+                
+            // Use the crate's battle-tested detector with overtone bleed suppression
+            let mut chord_detector = ChordDetector::builder()
+                .bleed(0.15)
+                .build();
+                
             let mut onset_detector = OnsetDetector::new(frame_size, sample_rate);
 
-            let mut buffer = Vec::with_capacity(frame_size);
+            let mut buffer = Vec::with_capacity(frame_size * 8);
+            let mut calibration_buffer = Vec::new();
 
             // State: only emit chord changes after an onset
             let mut last_emitted_chord: Option<String> = None;
@@ -103,7 +125,55 @@ impl AudioEngine {
                 if avail > 0 {
                     buffer.extend(cons.pop_iter());
                 }
+                
+                // Calibration Mode
+                if is_calibrating.load(Ordering::SeqCst) {
+                    if buffer.len() > 0 {
+                        calibration_buffer.extend(buffer.drain(..));
+                    }
+                    
+                    // Wait until we have about 0.5s of audio for a solid pitch reading
+                    if calibration_buffer.len() >= sample_rate / 2 {
+                        let mut mcleod = McLeodDetector::new(calibration_buffer.len(), calibration_buffer.len() / 2);
+                        // Convert f32 to f64 for pitch-detection crate
+                        let signal_f64: Vec<f64> = calibration_buffer.iter().map(|&x| x as f64).collect();
+                        
+                        if let Some(pitch) = mcleod.get_pitch(&signal_f64, sample_rate, 5.0, 0.7) {
+                            let f = pitch.frequency;
+                            
+                            // 1. Find the closest standard MIDI note to the detected frequency
+                            // MIDI note 69 is A4 (440Hz)
+                            let midi_float = 12.0 * (f / 440.0).log2() + 69.0;
+                            let midi_closest = midi_float.round();
+                            
+                            // 2. Calculate what the perfect frequency for that note SHOULD be
+                            let f_standard = 440.0 * 2f64.powf((midi_closest - 69.0) / 12.0);
+                            
+                            // 3. Calculate the tuning ratio (e.g. 0.98 if they are slightly flat)
+                            let ratio = f / f_standard;
+                            
+                            // 4. Calculate the new A4 reference by applying the ratio to 440Hz
+                            let new_a4 = 440.0 * ratio;
+                            
+                            // 5. Chromagram expects the frequency of C3 as the reference.
+                            // C3 is exactly 21 semitones below A4.
+                            let c3 = (new_a4 * 2f64.powf(-21.0 / 12.0)) as f32;
+                            chromagram.set_reference_frequency(c3);
+                            
+                            let _ = on_event.send(AudioEvent::CalibrationComplete { frequency: new_a4 as f32 });
+                        } else {
+                            // Failed to detect clear pitch, send 0 to indicate failure
+                            let _ = on_event.send(AudioEvent::CalibrationComplete { frequency: 0.0 });
+                        }
+                        
+                        calibration_buffer.clear();
+                        is_calibrating.store(false, Ordering::SeqCst);
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                    continue;
+                }
 
+                // Normal Mode
                 while buffer.len() >= frame_size {
                     let frame = &buffer[0..frame_size];
 
@@ -112,17 +182,14 @@ impl AudioEngine {
                     let _ = on_event.send(AudioEvent::AudioLevel { rms });
 
                     if rms < SILENCE_THRESHOLD {
-                        // Silence: skip all processing
                         silent_frame_count += 1;
-
-                        // After sustained silence (~1s), reset the classifier
-                        // so stale history doesn't affect the next strum
                         if silent_frame_count > 10 {
-                            classifier.reset();
                             last_emitted_chord = None;
                             onset_armed = false;
                         }
-
+                        // Still feed the frame into chromagram to keep its circular buffer valid, 
+                        // but ignore the output.
+                        let _ = chromagram.next(frame);
                         buffer.drain(0..frame_size);
                         continue;
                     }
@@ -139,22 +206,40 @@ impl AudioEngine {
                     }
 
                     // === CHROMAGRAM & CHORD CLASSIFICATION ===
-                    if let Some(chroma) = chromagram.process_frame(frame) {
-                        if let Some((chord, confidence)) = classifier.classify(&chroma) {
-                            // Only emit a chord event when:
-                            // 1. An onset has been detected (a strum happened), OR
-                            // 2. This is the very first chord detected (initial strum)
-                            let is_new_chord = last_emitted_chord.as_ref() != Some(&chord);
+                    if let Ok(Some(chroma_bins)) = chromagram.next(frame) {
+                        if let Ok(chord) = chord_detector.detect_chord(&chroma_bins) {
+                            // Confidence score is a distance, so lower is better. 
+                            // Let's invert it for our UI (0.0 to 1.0, higher is better).
+                            // A perfect match is 0.0 distance. 
+                            let inverted_confidence = (1.0 - chord.confidence).max(0.0);
+                            
+                            // Only accept somewhat confident readings
+                            if inverted_confidence > 0.5 {
+                                let chord_str = format!("{:?} {:?}", chord.root, chord.quality)
+                                    .replace("Major", "")
+                                    .replace("Minor", "m")
+                                    .replace("PowerFifth", "5")
+                                    .replace("DominantSeventh", "7")
+                                    .replace("MajorSeventh", "maj7")
+                                    .replace("MinorSeventh", "m7")
+                                    .replace("SuspendedSecond", "sus2")
+                                    .replace("SuspendedFourth", "sus4")
+                                    .replace("Unknown", "")
+                                    .trim()
+                                    .to_string();
 
-                            if onset_armed || last_emitted_chord.is_none() {
-                                let _ = on_event.send(AudioEvent::ChordDetected {
-                                    chord: chord.clone(),
-                                    confidence,
-                                    timestamp: 0,
-                                });
-                                last_emitted_chord = Some(chord);
-                                if is_new_chord {
-                                    onset_armed = false;
+                                let is_new_chord = last_emitted_chord.as_ref() != Some(&chord_str);
+
+                                if onset_armed || last_emitted_chord.is_none() {
+                                    let _ = on_event.send(AudioEvent::ChordDetected {
+                                        chord: chord_str.clone(),
+                                        confidence: inverted_confidence,
+                                        timestamp: 0,
+                                    });
+                                    last_emitted_chord = Some(chord_str);
+                                    if is_new_chord {
+                                        onset_armed = false;
+                                    }
                                 }
                             }
                         }

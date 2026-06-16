@@ -23,6 +23,9 @@ document.body.innerHTML = `
       </div>
     </div>
     <div class="flex items-center gap-sm">
+      <button class="btn-icon" id="nav-calibrate" title="Calibrate Tuning">
+        <i class="ph ph-waveform text-lg"></i>
+      </button>
       <button class="btn-icon" id="nav-matrix" title="Transition Matrix">
         <i class="ph ph-grid-four text-lg"></i>
       </button>
@@ -46,11 +49,32 @@ document.body.innerHTML = `
       <div id="account-body"></div>
     </div>
   </div>
+
+  <!-- Calibration Modal -->
+  <div id="calibration-modal" class="modal-overlay hidden">
+    <div class="modal-content glass rounded-xl p-xl flex flex-col items-center text-center gap-md max-w-sm w-full mx-lg">
+      <div class="w-16 h-16 rounded-full bg-surface-1 flex items-center justify-center mb-sm">
+        <i class="ph ph-waveform text-3xl text-accent animate-pulse" id="calibration-icon"></i>
+      </div>
+      <h2 class="text-xl font-bold text-text">Calibrate Tuning</h2>
+      <p class="text-subtext text-sm mb-lg">Pluck any single open string and let it ring clearly.</p>
+      
+      <div id="calibration-status" class="text-accent font-mono text-lg font-medium h-8">
+        Listening...
+      </div>
+      
+      <div class="flex gap-md w-full mt-md">
+        <button id="modal-calibration-cancel" class="btn glass flex-1 py-md text-subtext hover:text-text">Cancel</button>
+        <button id="modal-calibration-done" class="btn btn-primary flex-1 py-md hidden">Done</button>
+      </div>
+    </div>
+  </div>
 `;
 
 const appContent = document.querySelector<HTMLDivElement>('#app-content')!;
 const modeSelect = document.getElementById('mode-select') as HTMLSelectElement;
 const accountModal = document.getElementById('account-modal')!;
+const calibrationModal = document.getElementById('calibration-modal')!;
 
 // Mode selector: navigates between practice modes
 modeSelect.addEventListener('change', () => {
@@ -64,10 +88,60 @@ document.getElementById('nav-settings')?.addEventListener('click', () => router.
 document.getElementById('nav-account')?.addEventListener('click', () => openAccountModal());
 document.getElementById('modal-close')?.addEventListener('click', () => closeAccountModal());
 
-// Close modal on overlay click
+document.getElementById('nav-calibrate')?.addEventListener('click', () => openCalibrationModal());
+document.getElementById('modal-calibration-cancel')?.addEventListener('click', () => closeCalibrationModal());
+document.getElementById('modal-calibration-done')?.addEventListener('click', () => closeCalibrationModal());
+
+// Close modals on overlay click
 accountModal.addEventListener('click', (e) => {
   if (e.target === accountModal) closeAccountModal();
 });
+calibrationModal.addEventListener('click', (e) => {
+  if (e.target === calibrationModal) closeCalibrationModal();
+});
+
+import { audio } from './lib/audio-bridge';
+let unsubCalibrate: (() => void) | null = null;
+
+function openCalibrationModal() {
+  calibrationModal.classList.remove('hidden');
+  const statusEl = document.getElementById('calibration-status')!;
+  const doneBtn = document.getElementById('modal-calibration-done')!;
+  const cancelBtn = document.getElementById('modal-calibration-cancel')!;
+  const icon = document.getElementById('calibration-icon')!;
+  
+  statusEl.textContent = 'Listening...';
+  statusEl.className = 'text-accent font-mono text-lg font-medium h-8';
+  doneBtn.classList.add('hidden');
+  cancelBtn.classList.remove('hidden');
+  icon.classList.add('animate-pulse');
+  
+  // Ensure engine is running (if we're in one-minute mode, it might not be listening yet, but let's just send the command)
+  audio.calibratePitch();
+  
+  if (unsubCalibrate) unsubCalibrate();
+  unsubCalibrate = audio.onCalibrationComplete((ev) => {
+    icon.classList.remove('animate-pulse');
+    cancelBtn.classList.add('hidden');
+    doneBtn.classList.remove('hidden');
+    
+    if (ev.frequency > 0) {
+      statusEl.textContent = `Tuned to A = ${ev.frequency.toFixed(1)} Hz`;
+      statusEl.className = 'text-green font-mono text-lg font-medium h-8';
+    } else {
+      statusEl.textContent = 'Failed to detect pitch.';
+      statusEl.className = 'text-red font-mono text-lg font-medium h-8';
+    }
+  });
+}
+
+function closeCalibrationModal() {
+  calibrationModal.classList.add('hidden');
+  if (unsubCalibrate) {
+    unsubCalibrate();
+    unsubCalibrate = null;
+  }
+}
 
 function openAccountModal() {
   const state = store.getState();

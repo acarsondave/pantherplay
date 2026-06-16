@@ -15,10 +15,15 @@ export interface AudioLevelEvent {
   rms: number;
 }
 
+export interface CalibrationCompleteEvent {
+  frequency: number;
+}
+
 export type AudioEvent =
   | ({ type: 'ChordDetected' } & ChordEvent)
   | ({ type: 'OnsetDetected' } & OnsetEvent)
-  | ({ type: 'AudioLevel' } & AudioLevelEvent);
+  | ({ type: 'AudioLevel' } & AudioLevelEvent)
+  | ({ type: 'CalibrationComplete' } & CalibrationCompleteEvent);
 
 export interface AudioDevice {
   id: string;
@@ -31,6 +36,7 @@ class AudioBridge {
   private chordListeners: EventCallback<ChordEvent>[] = [];
   private onsetListeners: EventCallback<OnsetEvent>[] = [];
   private levelListeners: EventCallback<AudioLevelEvent>[] = [];
+  private calibrationListeners: EventCallback<CalibrationCompleteEvent>[] = [];
   private isListening = false;
 
   public async startListening(deviceId?: string) {
@@ -47,6 +53,9 @@ class AudioBridge {
           break;
         case 'AudioLevel':
           this.levelListeners.forEach(l => l(event));
+          break;
+        case 'CalibrationComplete':
+          this.calibrationListeners.forEach(l => l(event));
           break;
       }
     };
@@ -82,6 +91,14 @@ class AudioBridge {
     }
   }
 
+  public async calibratePitch() {
+    try {
+      await invoke('calibrate_pitch');
+    } catch (e) {
+      console.error('Failed to calibrate pitch:', e);
+    }
+  }
+
   public onChord(callback: EventCallback<ChordEvent>) {
     this.chordListeners.push(callback);
     return () => {
@@ -100,6 +117,13 @@ class AudioBridge {
     this.levelListeners.push(callback);
     return () => {
       this.levelListeners = this.levelListeners.filter(l => l !== callback);
+    };
+  }
+
+  public onCalibrationComplete(callback: EventCallback<CalibrationCompleteEvent>) {
+    this.calibrationListeners.push(callback);
+    return () => {
+      this.calibrationListeners = this.calibrationListeners.filter(l => l !== callback);
     };
   }
 }

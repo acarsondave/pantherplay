@@ -14,15 +14,11 @@ export function renderFreePlay(container: HTMLElement) {
       </div>
 
       <div class="flex-1 flex flex-col items-center justify-center w-full max-w-md">
-        <div id="chord-display" class="text-hero text-text font-bold mb-md leading-none" style="transition: color 150ms ease, transform 150ms ease">
+        <div id="chord-display" class="text-[12rem] font-bold mb-md leading-none tracking-tighter" style="transition: color 250ms ease, transform 250ms cubic-bezier(0.175, 0.885, 0.32, 1.275); color: var(--color-surface-2)">
           --
         </div>
 
-        <div class="w-full h-2 bg-surface-1 rounded-full overflow-hidden mb-lg">
-          <div id="confidence-fill" class="h-full bg-accent rounded-full" style="width: 0%; transition: width 150ms ease, background-color 150ms ease"></div>
-        </div>
-
-        <div class="flex items-center gap-sm text-subtext text-sm tracking-wide uppercase">
+        <div class="flex items-center gap-sm text-subtext text-sm tracking-wide uppercase mt-xl">
           <i id="mic-icon" class="ph ph-microphone text-lg text-green"></i>
           <span id="mic-status">listening...</span>
         </div>
@@ -47,28 +43,20 @@ export function renderFreePlay(container: HTMLElement) {
   });
 
   // Only update chord display after the Rust engine sends a confident detection
-  // (engine already gates on onset + confidence + stability)
   const unsubChord = audio.onChord((ev) => {
     const display = document.getElementById('chord-display');
-    const fill = document.getElementById('confidence-fill');
 
-    if (display && fill) {
+    if (display) {
       display.textContent = ev.chord;
-      display.style.transform = 'scale(1.05)';
-      setTimeout(() => { if(display) display.style.transform = 'scale(1)'; }, 150);
-
-      fill.style.width = `${Math.min(ev.confidence * 100, 100)}%`;
-
-      if (ev.confidence > 0.9) {
-        fill.style.backgroundColor = 'var(--color-green)';
-        display.style.color = 'var(--color-green)';
-      } else if (ev.confidence > 0.8) {
-        fill.style.backgroundColor = 'var(--color-yellow)';
-        display.style.color = 'var(--color-text)';
-      } else {
-        fill.style.backgroundColor = 'var(--color-red)';
-        display.style.color = 'var(--color-subtext-0)';
-      }
+      display.style.transform = 'scale(1.1) translateY(-10px)';
+      display.style.color = 'var(--color-accent)';
+      
+      setTimeout(() => { 
+        if(display) {
+          display.style.transform = 'scale(1) translateY(0)'; 
+          display.style.color = 'var(--color-text)';
+        }
+      }, 300);
     }
   });
 
