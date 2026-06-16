@@ -4,12 +4,12 @@ import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { store } from './store';
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  apiKey: "AIzaSyBn-PASAULEXqglx9i_Yn0tkypneIYVrqA",
+  authDomain: "pantherplay-dev.firebaseapp.com",
+  projectId: "pantherplay-dev",
+  storageBucket: "pantherplay-dev.firebasestorage.app",
+  messagingSenderId: "912868750603",
+  appId: "1:912868750603:web:49fa337418c3ebce919e0e"
 };
 
 export const app = initializeApp(firebaseConfig);
