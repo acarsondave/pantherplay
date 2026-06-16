@@ -1,8 +1,7 @@
-import { store } from '../lib/store';
+
 import { router } from '../lib/router';
 
 export function renderDashboard(container: HTMLElement) {
-  const state = store.getState();
 
   container.innerHTML = `
     <div class="zen-fade dashboard-layout h-full flex flex-col items-center justify-center gap-2xl w-full max-w-4xl mx-auto px-lg">

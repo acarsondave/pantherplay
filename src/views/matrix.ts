@@ -1,4 +1,4 @@
-import { router } from '../lib/router';
+
 
 export function renderMatrix(container: HTMLElement) {
   const chords = ['A', 'C', 'D', 'E', 'G', 'Am', 'Dm', 'Em'];
